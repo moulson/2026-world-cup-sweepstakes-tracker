@@ -98,6 +98,29 @@ export function teamMatchesMatcher(
   return false;
 }
 
+/**
+ * Builds a reusable finder that resolves the owning participant of a team.
+ * Matchers are built once for all participants, so the returned function is
+ * cheap to call repeatedly. Returns the first matching participant, or null.
+ */
+export function buildOwnerFinder(
+  participants: Participant[],
+  aliases: TeamAliasMap = teamAliases,
+): (team: Team) => Participant | null {
+  const entries = participants.map((participant) => ({
+    participant,
+    matcher: buildParticipantMatcher(participant, aliases),
+  }));
+
+  return (team: Team) => {
+    if (team.id == null && !team.name) return null;
+    for (const entry of entries) {
+      if (teamMatchesMatcher(team, entry.matcher)) return entry.participant;
+    }
+    return null;
+  };
+}
+
 export function matchInvolvesParticipant(
   match: Match,
   matcher: ParticipantMatcher,

@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
-import type { ApiStatus, MatchesCache, Participant } from '../../shared/types';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ApiStatus, Match, MatchesCache, Participant } from '../../shared/types';
+import { buildOwnerFinder } from '../../shared/matchResult';
+import { computeEliminatedTeams } from '../../shared/elimination';
 import {
   fetchMatches,
   fetchParticipants,
@@ -13,14 +15,54 @@ import styles from './App.module.css';
 
 type FixtureView = 'schedule' | 'bracket';
 
+const FINISHED_STATUSES = new Set(['FINISHED', 'AWARDED', 'CANCELLED']);
+
+/**
+ * Picks the "next game" to pre-highlight: the soonest non-finished fixture at or
+ * after now, falling back to the earliest non-finished fixture otherwise.
+ * Knockout matches are preferred (the bracket is the default view); if none are
+ * pending we fall back to the next match overall.
+ */
+function pickNextMatch(matches: Match[]): Match | null {
+  const now = Date.now();
+  const byDate = (a: Match, b: Match) =>
+    new Date(a.utcDate).getTime() - new Date(b.utcDate).getTime();
+
+  const pickFrom = (pool: Match[]): Match | null => {
+    const pending = pool.filter((m) => !FINISHED_STATUSES.has(m.status));
+    const future = pending
+      .filter((m) => new Date(m.utcDate).getTime() >= now)
+      .sort(byDate);
+    if (future.length > 0) return future[0];
+    return [...pending].sort(byDate)[0] ?? null;
+  };
+
+  const knockout = matches.filter((m) => m.stage !== 'GROUP_STAGE');
+  return pickFrom(knockout) ?? pickFrom(matches);
+}
+
 export default function App() {
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [matches, setMatches] = useState<MatchesCache | null>(null);
   const [status, setStatus] = useState<ApiStatus | null>(null);
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
-  const [fixtureView, setFixtureView] = useState<FixtureView>('schedule');
+  const [selectedFixtureId, setSelectedFixtureId] = useState<number | null>(null);
+  const [highlightedSlugs, setHighlightedSlugs] = useState<string[]>([]);
+  const [fixtureView, setFixtureView] = useState<FixtureView>('bracket');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const seededNextMatchId = useRef<number | null>(null);
+  const hasInteractedRef = useRef(false);
+
+  const nextMatch = useMemo(
+    () => (matches ? pickNextMatch(matches.matches) : null),
+    [matches],
+  );
+
+  const elimination = useMemo(
+    () => computeEliminatedTeams(matches?.matches ?? []),
+    [matches],
+  );
 
   const loadData = useCallback(async () => {
     try {
@@ -61,8 +103,44 @@ export default function App() {
     return () => clearInterval(interval);
   }, [status?.activeWindow, loadData]);
 
+  useEffect(() => {
+    if (!matches || participants.length === 0) return;
+    if (hasInteractedRef.current) return;
+
+    if (!nextMatch) {
+      seededNextMatchId.current = null;
+      return;
+    }
+
+    if (seededNextMatchId.current === nextMatch.id) return;
+
+    const findOwner = buildOwnerFinder(participants);
+    const slugs = Array.from(
+      new Set(
+        [findOwner(nextMatch.homeTeam)?.slug, findOwner(nextMatch.awayTeam)?.slug].filter(
+          (slug): slug is string => Boolean(slug),
+        ),
+      ),
+    );
+
+    seededNextMatchId.current = nextMatch.id;
+    setHighlightedSlugs(slugs);
+  }, [matches, nextMatch, participants]);
+
   const handleSelect = (slug: string) => {
-    setSelectedSlug((current) => (current === slug ? null : slug));
+    hasInteractedRef.current = true;
+    const deselect = selectedSlug === slug;
+    setSelectedFixtureId(null);
+    setSelectedSlug(deselect ? null : slug);
+    setHighlightedSlugs(deselect ? [] : [slug]);
+  };
+
+  const handleFixtureSelect = (fixtureId: number, participantSlugs: string[]) => {
+    hasInteractedRef.current = true;
+    const deselect = selectedFixtureId === fixtureId;
+    setSelectedSlug(null);
+    setSelectedFixtureId(deselect ? null : fixtureId);
+    setHighlightedSlugs(deselect ? [] : participantSlugs);
   };
 
   const selected = participants.find((p) => p.slug === selectedSlug) ?? null;
@@ -105,6 +183,8 @@ export default function App() {
           <ParticipantGrid
             participants={participants}
             selectedSlug={selectedSlug}
+            highlightedSlugs={highlightedSlugs}
+            elimination={elimination}
             onSelect={handleSelect}
           />
         </section>
@@ -148,7 +228,14 @@ export default function App() {
                 groupStageOnly
               />
             ) : (
-              <BracketView matches={matches.matches} selected={selected} />
+              <BracketView
+                matches={matches.matches}
+                selected={selected}
+                participants={participants}
+                nextMatchId={nextMatch?.id ?? null}
+                selectedFixtureId={selectedFixtureId}
+                onFixtureSelect={handleFixtureSelect}
+              />
             )
           ) : (
             <p className={styles.empty}>No fixture data available yet.</p>

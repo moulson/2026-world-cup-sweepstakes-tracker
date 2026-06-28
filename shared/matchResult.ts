@@ -1,4 +1,5 @@
 import {
+  buildOwnerFinder,
   buildParticipantMatcher,
   matchInvolvesParticipant,
   participantSideInMatch,
@@ -51,6 +52,7 @@ export function getParticipantTeamResult(
 }
 
 export {
+  buildOwnerFinder,
   buildParticipantMatcher,
   matchInvolvesParticipant,
   teamMatchesMatcher,

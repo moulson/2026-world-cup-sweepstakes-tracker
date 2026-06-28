@@ -8,6 +8,10 @@ A Docker-deployable web app for tracking FIFA World Cup 2026 fixtures alongside 
 - Live fixture data from [football-data.org](https://www.football-data.org/) API v4
 - Smart API polling — only during match windows and for one hour after each game ends
 - Click-to-highlight fixtures with win/loss/draw styling
+- Knockout bracket view (the default tab) drawn as an accurate binary tree with connector lines — fixtures are ordered so each tie feeds the correct next-round match, each shows its owning participant, and clicking a fixture highlights its participant(s) in the grid
+- Next upcoming game pre-highlighted automatically on load — flagged with a "Next up" badge in the bracket and its participant(s) highlighted in the grid
+- Kickoff dates and times shown in the viewer's local timezone
+- Eliminated nations are dimmed (greyed and struck through) on each participant card, with an "x/4 left" counter, so it's easy to see who still has teams in
 - Country flag emojis and profile image placeholders
 - Docker deployment with volume mounts for easy updates
 
@@ -44,14 +48,46 @@ npm run dev
 
 ## Docker Deployment
 
+### Local
+
 ```bash
 cp .env.example .env
-# Edit .env with your token
+# Edit .env with your token and PORT=5000
 
 docker compose up --build
 ```
 
-Open http://localhost:3000
+Open http://localhost:5000
+
+### Hetzner / Caddy (production)
+
+If Caddy runs in another compose file, use the production compose and a shared Docker network. See **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** for step-by-step instructions.
+
+```bash
+docker network create proxy   # once per server
+docker compose -f docker-compose.production.yml up --build -d
+```
+
+Caddy reverse-proxies to `world-cup-sweepstakes:5000` on the `proxy` network (example block in [docs/caddy-example.caddyfile](docs/caddy-example.caddyfile)).
+
+### Cloudflare Tunnel (cloudflared)
+
+If you already run a `cloudflared` tunnel, expose the app through it instead of Caddy — no public ports. The app joins your existing tunnel network (`cloudflare_tunnel`):
+
+```bash
+docker compose -f docker-compose.cloudflared.yml up --build -d
+```
+
+Add an ingress rule to your tunnel `config.yml`:
+
+```yaml
+ingress:
+  - hostname: sweepstakes.yourdomain.com
+    service: http://world-cup-sweepstakes:5000
+  - service: http_status:404
+```
+
+See **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** for full steps.
 
 ### Volume mounts
 

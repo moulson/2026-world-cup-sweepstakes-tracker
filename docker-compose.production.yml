@@ -1,0 +1,39 @@
+# Production deploy behind an external Caddy reverse proxy on a shared Docker network.
+#
+# One-time on the server:
+#   docker network create proxy
+#
+# In your Caddy compose, attach the caddy service to the same network:
+#   networks:
+#     - proxy
+#   ...
+# networks:
+#   proxy:
+#     external: true
+#
+# Then:
+#   docker compose -f docker-compose.production.yml up --build -d
+
+services:
+  app:
+    build: .
+    container_name: world-cup-sweepstakes
+    env_file: .env
+    volumes:
+      - ./data/draw.csv:/app/data/draw.csv:ro
+      - ./data/team-aliases.json:/app/data/team-aliases.json:ro
+      - ./data/cache:/app/data/cache
+      - ./public/profiles:/app/public/profiles:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - proxy
+
+networks:
+  proxy:
+    external: true

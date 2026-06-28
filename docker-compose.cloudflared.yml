@@ -1,0 +1,44 @@
+# Deploy behind an EXISTING cloudflared (Cloudflare Tunnel) on a shared Docker network.
+#
+# This is an alternative to docker-compose.production.yml (Caddy). It assumes you
+# already run a `cloudflared` container attached to an external Docker network.
+# On this machine that network is `cloudflare_tunnel` (discovered via `docker network ls`).
+#
+# The app does NOT publish a host port: cloudflared reaches it over the shared
+# network using the stable container name + internal port `world-cup-sweepstakes:5000`.
+#
+# One-time check (the network must already exist because cloudflared created it):
+#   docker network ls | grep cloudflare_tunnel
+#
+# Add this ingress rule to your cloudflared tunnel config (config.yml):
+#   ingress:
+#     - hostname: sweepstakes.yourdomain.com
+#       service: http://world-cup-sweepstakes:5000
+#     - service: http_status:404
+#
+# Then:
+#   docker compose -f docker-compose.cloudflared.yml up --build -d
+
+services:
+  app:
+    build: .
+    container_name: world-cup-sweepstakes
+    env_file: .env
+    volumes:
+      - ./data/draw.csv:/app/data/draw.csv:ro
+      - ./data/team-aliases.json:/app/data/team-aliases.json:ro
+      - ./data/cache:/app/data/cache
+      - ./public/profiles:/app/public/profiles:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - cloudflare_tunnel
+
+networks:
+  cloudflare_tunnel:
+    external: true

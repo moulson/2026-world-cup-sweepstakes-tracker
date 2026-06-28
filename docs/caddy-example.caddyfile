@@ -1,0 +1,8 @@
+# Add this site block to your existing Caddyfile (e.g. alongside demo.crimsoncresties.com).
+# Caddy must be on the same Docker network as world-cup-sweepstakes (see DEPLOYMENT.md).
+
+sweepstakes.yourdomain.com {
+	reverse_proxy world-cup-sweepstakes:5000 {
+		flush_interval -1
+	}
+}

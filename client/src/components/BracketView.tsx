@@ -1,6 +1,7 @@
-import { useMemo } from 'react';
-import type { Match, Participant, TeamResult } from '../../../shared/types';
+import { useMemo, type KeyboardEvent } from 'react';
+import type { Match, Participant, Team, TeamResult } from '../../../shared/types';
 import {
+  buildOwnerFinder,
   buildParticipantMatcher,
   getParticipantTeamResult,
   matchInvolvesParticipant,
@@ -9,20 +10,31 @@ import {
 import { getFlag } from '../../../shared/flags';
 import styles from './BracketView.module.css';
 
+type FindOwner = (team: Team) => Participant | null;
+type Matcher = ReturnType<typeof buildParticipantMatcher>;
+
 interface Props {
   matches: Match[];
   selected: Participant | null;
+  participants: Participant[];
+  nextMatchId: number | null;
+  selectedFixtureId: number | null;
+  onFixtureSelect: (fixtureId: number, participantSlugs: string[]) => void;
 }
 
-const KNOCKOUT_STAGES = [
-  { stage: 'LAST_32', label: 'Round of 32', slots: 16 },
-  { stage: 'LAST_16', label: 'Round of 16', slots: 8 },
-  { stage: 'QUARTER_FINALS', label: 'Quarter-finals', slots: 4 },
-  { stage: 'SEMI_FINALS', label: 'Semi-finals', slots: 2 },
-] as const;
+type FixtureSelectHandler = (fixtureId: number, participantSlugs: string[]) => void;
 
-const FINAL_STAGES = [
-  { stage: 'THIRD_PLACE', label: 'Third place' },
+/**
+ * Rounds are laid out left-to-right as a binary tree. Within a round, matches
+ * are ordered by their football-data id, which mirrors the official bracket
+ * order top-to-bottom: consecutive pairs feed the next round's match, so e.g.
+ * the first two Round of 32 ties feed the first Round of 16 tie.
+ */
+const ROUNDS = [
+  { stage: 'LAST_32', label: 'Round of 32' },
+  { stage: 'LAST_16', label: 'Round of 16' },
+  { stage: 'QUARTER_FINALS', label: 'Quarter-finals' },
+  { stage: 'SEMI_FINALS', label: 'Semi-finals' },
   { stage: 'FINAL', label: 'Final' },
 ] as const;
 
@@ -50,55 +62,102 @@ function formatStatus(status: string): string {
   return status.replace(/_/g, ' ');
 }
 
+function formatKickoff(utcDate: string): string {
+  return new Date(utcDate).toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function sortById(matches: Match[]): Match[] {
+  return [...matches].sort((a, b) => a.id - b.id);
+}
+
 function BracketMatch({
   match,
   matcher,
   selected,
+  findOwner,
+  isNext,
+  isSelected,
+  onFixtureSelect,
 }: {
   match: Match;
-  matcher: ReturnType<typeof buildParticipantMatcher>;
+  matcher: Matcher;
   selected: Participant | null;
+  findOwner: FindOwner;
+  isNext: boolean;
+  isSelected: boolean;
+  onFixtureSelect: FixtureSelectHandler;
 }) {
   const involved = selected ? matchInvolvesParticipant(match, matcher) : false;
   const result = involved ? getParticipantTeamResult(match, matcher) : 'pending';
-  const homeHighlighted =
-    involved && teamMatchesMatcher(match.homeTeam, matcher);
-  const awayHighlighted =
-    involved && teamMatchesMatcher(match.awayTeam, matcher);
+  const homeHighlighted = involved && teamMatchesMatcher(match.homeTeam, matcher);
+  const awayHighlighted = involved && teamMatchesMatcher(match.awayTeam, matcher);
 
   const homeScore = match.score.fullTime.home;
   const awayScore = match.score.fullTime.away;
   const hasScore = homeScore !== null && awayScore !== null;
 
+  const homeOwner = findOwner(match.homeTeam);
+  const awayOwner = findOwner(match.awayTeam);
+
+  const ownerSlugs = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          [homeOwner?.slug, awayOwner?.slug].filter(
+            (slug): slug is string => Boolean(slug),
+          ),
+        ),
+      ),
+    [homeOwner?.slug, awayOwner?.slug],
+  );
+
+  const interactive = ownerSlugs.length > 0;
+
+  const handleSelect = () => {
+    if (interactive) onFixtureSelect(match.id, ownerSlugs);
+  };
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (!interactive) return;
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      onFixtureSelect(match.id, ownerSlugs);
+    }
+  };
+
   return (
     <div
-      className={`${styles.match} ${involved ? resultClass(result) : ''} ${involved ? styles.highlighted : ''}`}
+      className={`${styles.match} ${involved ? resultClass(result) : ''} ${involved ? styles.highlighted : ''} ${isSelected ? styles.selectedFixture : ''} ${isNext ? styles.next : ''} ${interactive ? styles.clickable : ''}`}
+      onClick={interactive ? handleSelect : undefined}
+      onKeyDown={interactive ? handleKeyDown : undefined}
+      role={interactive ? 'button' : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      aria-pressed={interactive ? isSelected : undefined}
     >
+      {isNext && <span className={styles.nextBadge}>Next up</span>}
       <div
         className={`${styles.teamRow} ${homeHighlighted ? styles.teamHighlighted : ''}`}
       >
-        <span className={styles.flag}>
-          {getFlag(teamLabel(match.homeTeam.name))}
-        </span>
+        <span className={styles.flag}>{getFlag(teamLabel(match.homeTeam.name))}</span>
         <span className={styles.teamName}>{teamLabel(match.homeTeam.name)}</span>
+        {homeOwner && <span className={styles.participantName}>{homeOwner.name}</span>}
         {hasScore && <span className={styles.score}>{homeScore}</span>}
       </div>
       <div
         className={`${styles.teamRow} ${awayHighlighted ? styles.teamHighlighted : ''}`}
       >
-        <span className={styles.flag}>
-          {getFlag(teamLabel(match.awayTeam.name))}
-        </span>
+        <span className={styles.flag}>{getFlag(teamLabel(match.awayTeam.name))}</span>
         <span className={styles.teamName}>{teamLabel(match.awayTeam.name)}</span>
+        {awayOwner && <span className={styles.participantName}>{awayOwner.name}</span>}
         {hasScore && <span className={styles.score}>{awayScore}</span>}
       </div>
       <div className={styles.matchMeta}>
-        <time dateTime={match.utcDate}>
-          {new Date(match.utcDate).toLocaleDateString(undefined, {
-            month: 'short',
-            day: 'numeric',
-          })}
-        </time>
+        <time dateTime={match.utcDate}>{formatKickoff(match.utcDate)}</time>
         <span
           className={`${styles.status} ${match.status === 'IN_PLAY' || match.status === 'PAUSED' ? styles.statusLive : ''}`}
         >
@@ -109,83 +168,102 @@ function BracketMatch({
   );
 }
 
+function MatchSlot(props: {
+  match: Match;
+  matcher: Matcher;
+  selected: Participant | null;
+  findOwner: FindOwner;
+  nextMatchId: number | null;
+  selectedFixtureId: number | null;
+  onFixtureSelect: FixtureSelectHandler;
+}) {
+  return (
+    <div className={styles.matchSlot}>
+      <BracketMatch
+        match={props.match}
+        matcher={props.matcher}
+        selected={props.selected}
+        findOwner={props.findOwner}
+        isNext={props.match.id === props.nextMatchId}
+        isSelected={props.match.id === props.selectedFixtureId}
+        onFixtureSelect={props.onFixtureSelect}
+      />
+    </div>
+  );
+}
+
 function RoundColumn({
   label,
   matches,
-  slots,
-  roundIndex,
+  hasNext,
   matcher,
   selected,
+  findOwner,
+  nextMatchId,
+  selectedFixtureId,
+  onFixtureSelect,
 }: {
   label: string;
   matches: Match[];
-  slots: number;
-  roundIndex: number;
-  matcher: ReturnType<typeof buildParticipantMatcher>;
+  hasNext: boolean;
+  matcher: Matcher;
   selected: Participant | null;
+  findOwner: FindOwner;
+  nextMatchId: number | null;
+  selectedFixtureId: number | null;
+  onFixtureSelect: FixtureSelectHandler;
 }) {
-  const sorted = [...matches].sort(
-    (a, b) => new Date(a.utcDate).getTime() - new Date(b.utcDate).getTime(),
-  );
-
-  const placeholders = Math.max(0, slots - sorted.length);
-
-  const roundClass = [styles.round, styles[`round${roundIndex}` as keyof typeof styles]]
-    .filter(Boolean)
-    .join(' ');
-
   return (
-    <div className={roundClass}>
+    <div className={`${styles.round} ${hasNext ? styles.withConnectors : ''}`}>
       <h3 className={styles.roundTitle}>{label}</h3>
-      <div className={styles.roundMatches}>
-        {sorted.map((match) => (
-          <BracketMatch
+      <div className={styles.roundBody}>
+        {matches.map((match) => (
+          <MatchSlot
             key={match.id}
             match={match}
             matcher={matcher}
             selected={selected}
+            findOwner={findOwner}
+            nextMatchId={nextMatchId}
+            selectedFixtureId={selectedFixtureId}
+            onFixtureSelect={onFixtureSelect}
           />
-        ))}
-        {Array.from({ length: placeholders }, (_, index) => (
-          <div key={`tbd-${label}-${index}`} className={styles.matchTbd}>
-            <div className={styles.teamRow}>
-              <span className={styles.teamName}>TBD</span>
-            </div>
-            <div className={styles.teamRow}>
-              <span className={styles.teamName}>TBD</span>
-            </div>
-            <div className={styles.matchMeta}>
-              <span className={styles.status}>Winner advances</span>
-            </div>
-          </div>
         ))}
       </div>
     </div>
   );
 }
 
-export function BracketView({ matches, selected }: Props) {
-  const matcher = useMemo(
-    () => buildParticipantMatcher(selected),
-    [selected],
-  );
-
-  const knockoutMatches = useMemo(
-    () => matches.filter((match) => match.stage !== 'GROUP_STAGE'),
-    [matches],
+export function BracketView({
+  matches,
+  selected,
+  participants,
+  nextMatchId,
+  selectedFixtureId,
+  onFixtureSelect,
+}: Props) {
+  const matcher = useMemo(() => buildParticipantMatcher(selected), [selected]);
+  const findOwner = useMemo<FindOwner>(
+    () => buildOwnerFinder(participants),
+    [participants],
   );
 
   const byStage = useMemo(() => {
     const map = new Map<string, Match[]>();
-    for (const match of knockoutMatches) {
+    for (const match of matches) {
+      if (match.stage === 'GROUP_STAGE') continue;
       const list = map.get(match.stage) ?? [];
       list.push(match);
       map.set(match.stage, list);
     }
+    for (const [stage, list] of map) map.set(stage, sortById(list));
     return map;
-  }, [knockoutMatches]);
+  }, [matches]);
 
-  if (knockoutMatches.length === 0) {
+  const thirdPlace = byStage.get('THIRD_PLACE')?.[0] ?? null;
+  const hasKnockout = ROUNDS.some((r) => (byStage.get(r.stage)?.length ?? 0) > 0);
+
+  if (!hasKnockout) {
     return (
       <p className={styles.empty}>
         Knockout fixtures will appear here once the bracket is published.
@@ -196,49 +274,38 @@ export function BracketView({ matches, selected }: Props) {
   return (
     <div className={styles.bracketScroll}>
       <div className={styles.bracket}>
-        {KNOCKOUT_STAGES.map((round, index) => (
+        {ROUNDS.map((round, index) => (
           <RoundColumn
             key={round.stage}
             label={round.label}
             matches={byStage.get(round.stage) ?? []}
-            slots={round.slots}
-            roundIndex={index}
+            hasNext={index < ROUNDS.length - 1}
             matcher={matcher}
             selected={selected}
+            findOwner={findOwner}
+            nextMatchId={nextMatchId}
+            selectedFixtureId={selectedFixtureId}
+            onFixtureSelect={onFixtureSelect}
           />
         ))}
-        <div className={styles.finalColumn}>
-          {FINAL_STAGES.map((round) => {
-            const roundMatches = byStage.get(round.stage) ?? [];
-            return (
-              <div key={round.stage} className={styles.finalRound}>
-                <h3 className={styles.roundTitle}>{round.label}</h3>
-                <div className={styles.roundMatches}>
-                  {roundMatches.length > 0 ? (
-                    roundMatches.map((match) => (
-                      <BracketMatch
-                        key={match.id}
-                        match={match}
-                        matcher={matcher}
-                        selected={selected}
-                      />
-                    ))
-                  ) : (
-                    <div className={styles.matchTbd}>
-                      <div className={styles.teamRow}>
-                        <span className={styles.teamName}>TBD</span>
-                      </div>
-                      <div className={styles.teamRow}>
-                        <span className={styles.teamName}>TBD</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
       </div>
+
+      {thirdPlace && (
+        <div className={styles.thirdPlace}>
+          <h3 className={styles.roundTitle}>Third place play-off</h3>
+          <div className={styles.thirdPlaceCard}>
+            <BracketMatch
+              match={thirdPlace}
+              matcher={matcher}
+              selected={selected}
+              findOwner={findOwner}
+              isNext={thirdPlace.id === nextMatchId}
+              isSelected={thirdPlace.id === selectedFixtureId}
+              onFixtureSelect={onFixtureSelect}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

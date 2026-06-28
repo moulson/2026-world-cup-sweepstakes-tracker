@@ -23,6 +23,16 @@
   box-shadow: 0 0 0 3px var(--accent-glow);
 }
 
+.card.highlighted {
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.3);
+}
+
+.card.selected.highlighted {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow), 0 0 0 6px rgba(245, 158, 11, 0.3);
+}
+
 .avatar {
   flex-shrink: 0;
   width: 56px;
@@ -44,9 +54,20 @@
 }
 
 .name {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
   margin: 0 0 0.5rem;
   font-size: 1rem;
   font-weight: 600;
+}
+
+.aliveCount {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-muted);
 }
 
 .teams {
@@ -74,4 +95,14 @@
 .unmapped {
   opacity: 0.6;
   font-style: italic;
+}
+
+.eliminated {
+  opacity: 0.35;
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+.eliminated .flag {
+  filter: grayscale(1);
 }
