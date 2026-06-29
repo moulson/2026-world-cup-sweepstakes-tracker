@@ -84,4 +84,48 @@ describe('buildParticipantMatcher', () => {
 
     expect(matchInvolvesParticipant(makeMatch(), matcher)).toBe(true);
   });
+
+  it('does not match a team whose name merely contains a three-letter code', () => {
+    // Regression: "japan" must not match Panama via the "PAN" code, and
+    // "austria" must not match Australia via the "AUS" code.
+    const panamaOwner = buildParticipantMatcher(
+      makeParticipant([
+        { csvName: 'Panama', team: { id: 50, name: 'Panama', shortName: 'Panama', tla: 'PAN' } },
+      ]),
+    );
+    const australiaOwner = buildParticipantMatcher(
+      makeParticipant([
+        { csvName: 'Australia', team: { id: 60, name: 'Australia', shortName: 'Australia', tla: 'AUS' } },
+      ]),
+    );
+
+    const japan: Match['homeTeam'] = { id: 66, name: 'Japan', shortName: 'Japan', tla: 'JPN' };
+    const austria: Match['homeTeam'] = { id: 70, name: 'Austria', shortName: 'Austria', tla: 'AUT' };
+
+    expect(teamMatchesMatcher(japan, panamaOwner)).toBe(false);
+    expect(teamMatchesMatcher(austria, australiaOwner)).toBe(false);
+  });
+
+  it('matches the correct owner by resolved id even when another code is a substring', () => {
+    const japanOwner = buildParticipantMatcher(
+      makeParticipant([
+        { csvName: 'Japan', team: { id: 66, name: 'Japan', shortName: 'Japan', tla: 'JPN' } },
+      ]),
+    );
+    const japan: Match['homeTeam'] = { id: 66, name: 'Japan', shortName: 'Japan', tla: 'JPN' };
+
+    expect(teamMatchesMatcher(japan, japanOwner)).toBe(true);
+  });
+
+  it('still matches multi-word partials like Cape Verde', () => {
+    const owner = buildParticipantMatcher(makeParticipant([{ csvName: 'Cape Verde' }]));
+    const capeVerde: Match['homeTeam'] = {
+      id: 80,
+      name: 'Cape Verde Islands',
+      shortName: 'Cape Verde',
+      tla: 'CPV',
+    };
+
+    expect(teamMatchesMatcher(capeVerde, owner)).toBe(true);
+  });
 });

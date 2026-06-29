@@ -67,6 +67,26 @@ export function buildParticipantMatcher(
   return { teamIds, normalizedNames };
 }
 
+/**
+ * True when `needle` appears inside `haystack` aligned to word boundaries (both
+ * already normalized to space-separated lowercase tokens).
+ *
+ * This is the fuzzy fallback used only when an exact name match fails. Matching
+ * on word boundaries avoids false positives such as "japan" matching the three
+ * letter code "pan" (Panama) or "austria" matching "aus" (Australia), while
+ * still matching multi-word partials like "cape verde" inside "cape verde
+ * islands".
+ */
+function containsWholeWords(haystack: string, needle: string): boolean {
+  if (!haystack || !needle) return false;
+  if (haystack === needle) return true;
+  return (
+    haystack.startsWith(`${needle} `) ||
+    haystack.endsWith(` ${needle}`) ||
+    haystack.includes(` ${needle} `)
+  );
+}
+
 export function teamMatchesMatcher(
   team: Team,
   matcher: ParticipantMatcher,
@@ -81,14 +101,15 @@ export function teamMatchesMatcher(
 
   for (const candidate of candidates) {
     const normalized = normalizeTeamName(candidate);
+    if (!normalized) continue;
     if (matcher.normalizedNames.has(normalized)) {
       return true;
     }
 
     for (const known of matcher.normalizedNames) {
       if (
-        normalized.includes(known) ||
-        known.includes(normalized)
+        containsWholeWords(normalized, known) ||
+        containsWholeWords(known, normalized)
       ) {
         return true;
       }

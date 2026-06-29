@@ -26,6 +26,7 @@
 
 ### Fixed
 
+- Team-to-participant matching no longer produces false positives from loose substring matching — fixtures matched an owner whose three-letter code happened to be a substring of the team name (e.g. Japan resolving to the Panama owner via "PAN", or Australia to the Austria owner via "AUS"). The fuzzy name fallback now only matches on whole-word boundaries, so owners like Japan → Alex and Germany → Dad resolve correctly
 - Bracket matches no longer overlap vertically — each match sits in a taller equal-height slot with clear spacing
 - Clicking a bracket fixture now highlights that fixture (amber ring) and is mutually exclusive with selecting a participant, so a previously selected participant's fixtures no longer stay highlighted; the next-game pre-highlight stops seeding once you interact
 - Participant click-to-highlight now works when team resolver returns null by matching fixture teams on normalized names and aliases
