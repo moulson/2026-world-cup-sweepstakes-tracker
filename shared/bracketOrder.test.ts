@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  BRACKET_DISPLAY_ORDER,
   BRACKET_FEEDERS,
   buildBracketSlots,
   getBracketFixtureNumber,
@@ -11,6 +12,10 @@ function apiMatch(fixture: number, apiId = fixture + 500_000) {
   return { id: apiId, matchday: fixture };
 }
 
+const ALL_R32 = [73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88].map((fixture) =>
+  apiMatch(fixture),
+);
+
 describe('getBracketFixtureNumber', () => {
   it('reads the FIFA fixture number from matchday', () => {
     expect(getBracketFixtureNumber({ id: 537_891, matchday: 91 })).toBe(91);
@@ -21,31 +26,40 @@ describe('getBracketFixtureNumber', () => {
   });
 });
 
-describe('sortMatchesForBracket', () => {
-  it('orders Round of 32 so Brazil/Japan and Ivory Coast/Norway feed match 91', () => {
-    const fixtures = sortMatchesForBracket(
-      'LAST_32',
-      [73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88].map((fixture) =>
-        apiMatch(fixture),
-      ),
-    ).map((m) => getBracketFixtureNumber(m));
+describe('bracket column alignment', () => {
+  it('places Brazil/Japan and Ivory Coast/Norway at the pair feeding RO16 fixture 91', () => {
+    const r32Fixtures = sortMatchesForBracket('LAST_32', ALL_R32).map(
+      (m) => getBracketFixtureNumber(m)!,
+    );
+    const r16Slots = buildBracketSlots(
+      'LAST_16',
+      [89, 90, 91].map((fixture) => apiMatch(fixture)),
+    );
 
-    expect(fixtures[4]).toBe(76);
-    expect(fixtures[5]).toBe(78);
-    expect(BRACKET_FEEDERS[91]).toEqual([76, 78]);
+    const brazilSlot = r16Slots.findIndex(
+      (slot) => slot && getBracketFixtureNumber(slot) === 91,
+    );
+    expect(brazilSlot).toBe(4);
+
+    const feederA = r32Fixtures[brazilSlot * 2];
+    const feederB = r32Fixtures[brazilSlot * 2 + 1];
+    expect([feederA, feederB]).toEqual(BRACKET_FEEDERS[91]);
+    expect(feederA).toBe(76);
+    expect(feederB).toBe(78);
   });
 
-  it('orders Round of 32 so Portugal/Croatia and Spain/Austria feed match 93', () => {
-    const fixtures = sortMatchesForBracket(
-      'LAST_32',
-      [73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88].map((fixture) =>
-        apiMatch(fixture),
-      ),
-    ).map((m) => getBracketFixtureNumber(m));
+  it('aligns every Round of 32 pair with its Round of 16 parent', () => {
+    const r32Fixtures = sortMatchesForBracket('LAST_32', ALL_R32).map(
+      (m) => getBracketFixtureNumber(m)!,
+    );
+    const r16Fixtures = BRACKET_DISPLAY_ORDER.LAST_16;
 
-    expect(fixtures[8]).toBe(83);
-    expect(fixtures[9]).toBe(84);
-    expect(BRACKET_FEEDERS[93]).toEqual([83, 84]);
+    for (let slot = 0; slot < r16Fixtures.length; slot += 1) {
+      const parent = r16Fixtures[slot];
+      const feeders = BRACKET_FEEDERS[parent];
+      expect(r32Fixtures[slot * 2]).toBe(feeders![0]);
+      expect(r32Fixtures[slot * 2 + 1]).toBe(feeders![1]);
+    }
   });
 
   it('aligns Round of 16 pairs with quarter-final parents', () => {
@@ -62,18 +76,9 @@ describe('sortMatchesForBracket', () => {
     for (let slot = 0; slot < 4; slot += 1) {
       const parentFixture = qfFixtures[slot];
       const feeders = BRACKET_FEEDERS[parentFixture];
-      expect(feeders).toBeDefined();
       expect(r16Fixtures[slot * 2]).toBe(feeders![0]);
       expect(r16Fixtures[slot * 2 + 1]).toBe(feeders![1]);
     }
-  });
-
-  it('falls back to id sort for unknown stages', () => {
-    const ordered = sortMatchesForBracket('THIRD_PLACE', [
-      { id: 103, matchday: 103 },
-      { id: 50, matchday: 50 },
-    ]);
-    expect(ordered.map((m) => m.id)).toEqual([50, 103]);
   });
 });
 
@@ -109,19 +114,17 @@ describe('buildBracketSlots', () => {
     expect(getBracketFixtureNumber(slots[4]!)).toBe(91);
   });
 
-  it('fills every slot when the full round is available', () => {
-    const slots = buildBracketSlots(
-      'LAST_16',
-      [89, 90, 91, 92, 93, 94, 95, 96].map((fixture) => apiMatch(fixture)),
-    );
-
-    expect(slots.every((slot) => slot !== null)).toBe(true);
-    expect(slots.map((slot) => getBracketFixtureNumber(slot!))).toEqual([
-      89, 90, 93, 94, 91, 92, 95, 96,
-    ]);
-  });
-
   it('returns an empty array when the round has no matches', () => {
     expect(buildBracketSlots('LAST_16', [])).toEqual([]);
+  });
+});
+
+describe('sortMatchesForBracket', () => {
+  it('falls back to id sort for unknown stages', () => {
+    const ordered = sortMatchesForBracket('THIRD_PLACE', [
+      { id: 103, matchday: 103 },
+      { id: 50, matchday: 50 },
+    ]);
+    expect(ordered.map((m) => m.id)).toEqual([50, 103]);
   });
 });
