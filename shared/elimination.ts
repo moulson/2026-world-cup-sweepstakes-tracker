@@ -1,4 +1,4 @@
-import type { Match, ParticipantTeam, Team } from './types.js';
+import type { Match, Participant, ParticipantTeam, Team } from './types.js';
 import {
   normalizeTeamName,
   resolveCsvLookupName,
@@ -31,6 +31,35 @@ function isRealTeam(team: Team): boolean {
   return team.id != null || Boolean(team.name);
 }
 
+export function isSameTeam(a: Team, b: Team): boolean {
+  if (a.id != null && b.id != null) return a.id === b.id;
+
+  const aNames = [a.name, a.shortName, a.tla]
+    .filter((value): value is string => Boolean(value))
+    .map(normalizeTeamName);
+  const bNames = [b.name, b.shortName, b.tla]
+    .filter((value): value is string => Boolean(value))
+    .map(normalizeTeamName);
+
+  return aNames.some((name) => bNames.includes(name));
+}
+
+/** Returns the losing side of a finished knockout tie, if one is known. */
+export function getKnockoutMatchLoser(match: Match): Team | null {
+  if (match.stage === 'GROUP_STAGE') return null;
+  if (!FINISHED_STATUSES.has(match.status)) return null;
+
+  const { home, away } = readFullTime(match.score);
+  if (home === null || away === null) return null;
+
+  if (home > away) return match.awayTeam;
+  if (away > home) return match.homeTeam;
+  if (match.score?.winner === 'HOME_TEAM') return match.awayTeam;
+  if (match.score?.winner === 'AWAY_TEAM') return match.homeTeam;
+
+  return null;
+}
+
 /**
  * Determines which teams are out of the tournament so the UI can dim them.
  *
@@ -52,16 +81,7 @@ export function computeEliminatedTeams(matches: Match[]): EliminationInfo {
   const knockoutMatches = matches.filter((m) => m.stage !== 'GROUP_STAGE');
 
   for (const match of knockoutMatches) {
-    if (!FINISHED_STATUSES.has(match.status)) continue;
-    const { home, away } = readFullTime(match.score);
-    if (home === null || away === null) continue;
-
-    let loser: Team | null = null;
-    if (home > away) loser = match.awayTeam;
-    else if (away > home) loser = match.homeTeam;
-    else if (match.score?.winner === 'HOME_TEAM') loser = match.awayTeam;
-    else if (match.score?.winner === 'AWAY_TEAM') loser = match.homeTeam;
-
+    const loser = getKnockoutMatchLoser(match);
     if (loser && isRealTeam(loser)) {
       collectTeamKeys(loser, teamIds, normalizedNames);
     }
@@ -102,6 +122,16 @@ export function computeEliminatedTeams(matches: Match[]): EliminationInfo {
  * Matches on the resolved API team id first, then falls back to the CSV name
  * (and its alias) plus any resolved team names, mirroring the matcher logic.
  */
+export function isParticipantFullyEliminated(
+  participant: Participant,
+  elimination: EliminationInfo,
+  aliases?: TeamAliasMap,
+): boolean {
+  return participant.teams.every((team) =>
+    isParticipantTeamEliminated(team, elimination, aliases),
+  );
+}
+
 export function isParticipantTeamEliminated(
   entry: ParticipantTeam,
   elimination: EliminationInfo,
