@@ -9,6 +9,7 @@ import {
 } from '../../../shared/matchResult';
 import { getFlag } from '../../../shared/flags';
 import { getKnockoutMatchLoser, isSameTeam } from '../../../shared/elimination';
+import { sortMatchesForBracket } from '../../../shared/bracketOrder';
 import { getDisplayScore } from '../../../shared/matchScore';
 import styles from './BracketView.module.css';
 
@@ -27,10 +28,9 @@ interface Props {
 type FixtureSelectHandler = (fixtureId: number, participantSlugs: string[]) => void;
 
 /**
- * Rounds are laid out left-to-right as a binary tree. Within a round, matches
- * are ordered by their football-data id, which mirrors the official bracket
- * order top-to-bottom: consecutive pairs feed the next round's match, so e.g.
- * the first two Round of 32 ties feed the first Round of 16 tie.
+ * Rounds are laid out left-to-right as a binary tree. Within each round, matches
+ * are ordered via the FIFA 2026 feeder map so consecutive pairs feed the correct
+ * next-round tie (e.g. Brazil/Japan and Ivory Coast/Norway → match 91).
  */
 const ROUNDS = [
   { stage: 'LAST_32', label: 'Round of 32' },
@@ -71,10 +71,6 @@ function formatKickoff(utcDate: string): string {
     hour: '2-digit',
     minute: '2-digit',
   });
-}
-
-function sortById(matches: Match[]): Match[] {
-  return [...matches].sort((a, b) => a.id - b.id);
 }
 
 function BracketMatch({
@@ -263,7 +259,7 @@ export function BracketView({
       list.push(match);
       map.set(match.stage, list);
     }
-    for (const [stage, list] of map) map.set(stage, sortById(list));
+    for (const [stage, list] of map) map.set(stage, sortMatchesForBracket(stage, list));
     return map;
   }, [matches]);
 

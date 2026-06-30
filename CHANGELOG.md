@@ -13,7 +13,7 @@
 
 - Participants whose four nations are all eliminated are now dimmed across the whole card (greyed avatar, muted name) for quicker scanning of who is still in the running
 - Knockout bracket rows for the losing side of a finished tie are dimmed with a strikethrough team name and greyed flag, matching the per-team styling on participant cards
-- Knockout bracket is now an accurate binary tree: rounds are ordered by football-data match id (the official bracket order) instead of by kickoff date, so consecutive Round of 32 ties feed the correct Round of 16 match (e.g. Germany v Paraguay vs the France v Sweden winner)
+- Knockout bracket is now an accurate binary tree: rounds use the FIFA 2026 feeder map so each tie connects to the correct next-round match (e.g. Brazil/Japan and Ivory Coast/Norway feed match 91), with rounds vertically aligned so every match sits at the midpoint of its two feeders; the Final is a connected column and the third-place play-off is shown as a separate card
 - Bracket draws connector lines between each tie and the match it feeds, with rounds vertically aligned so every match sits at the midpoint of its two feeders; the Final is a connected column and the third-place play-off is shown as a separate card
 - `docker-compose.cloudflared.yml` for deploy behind an existing Cloudflare Tunnel on the shared `cloudflare_tunnel` Docker network (no published host port; tunnel ingress targets `http://world-cup-sweepstakes:5000`)
 - [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) with Hetzner + existing Caddy stack instructions, plus a Cloudflare Tunnel deployment section
@@ -28,6 +28,7 @@
 
 ### Fixed
 
+- Knockout bracket connector lines now follow FIFA's cross-pairings at the Round of 32 → Round of 16 step (e.g. Brazil/Japan and Ivory Coast/Norway feed match 91; Spain/Austria and Portugal/Croatia feed match 93) instead of assuming consecutive match ids are paired
 - Penalty-shootout and extra-time results no longer break the app: football-data.org v4 can return `homeTeam`/`awayTeam` score fields (especially after knockout ties), which left `fullTime.home`/`away` undefined and caused elimination/result logic to mis-read finished matches. Scores are now normalized on fetch and when loading the cache, and win/loss styling uses `score.winner` when full-time is level
 - Partial API failures no longer blank the whole page — participants and fixtures load independently when one endpoint is unavailable
 
