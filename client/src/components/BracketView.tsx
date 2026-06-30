@@ -9,7 +9,7 @@ import {
 } from '../../../shared/matchResult';
 import { getFlag } from '../../../shared/flags';
 import { getKnockoutMatchLoser, isSameTeam } from '../../../shared/elimination';
-import { buildBracketSlots } from '../../../shared/bracketOrder';
+import { buildKnockoutBracket, type BracketSlot } from '../../../shared/bracketOrder';
 import { getDisplayScore } from '../../../shared/matchScore';
 import styles from './BracketView.module.css';
 
@@ -27,18 +27,13 @@ interface Props {
 
 type FixtureSelectHandler = (fixtureId: number, participantSlugs: string[]) => void;
 
-/**
- * Rounds are laid out left-to-right as a binary tree. Within each round, matches
- * are ordered via the FIFA 2026 feeder map so consecutive pairs feed the correct
- * next-round tie (e.g. Brazil/Japan and Ivory Coast/Norway → match 91).
- */
-const ROUNDS = [
-  { stage: 'LAST_32', label: 'Round of 32' },
-  { stage: 'LAST_16', label: 'Round of 16' },
-  { stage: 'QUARTER_FINALS', label: 'Quarter-finals' },
-  { stage: 'SEMI_FINALS', label: 'Semi-finals' },
-  { stage: 'FINAL', label: 'Final' },
-] as const;
+const ROUND_LABELS: Record<string, string> = {
+  LAST_32: 'Round of 32',
+  LAST_16: 'Round of 16',
+  QUARTER_FINALS: 'Quarter-finals',
+  SEMI_FINALS: 'Semi-finals',
+  FINAL: 'Final',
+};
 
 function resultClass(result: TeamResult): string {
   switch (result) {
@@ -73,9 +68,12 @@ function formatKickoff(utcDate: string): string {
   });
 }
 
-function BracketPlaceholder() {
+function BracketPlaceholder({ fixture }: { fixture: number }) {
   return (
-    <div className={`${styles.match} ${styles.matchTbd}`}>
+    <div
+      className={`${styles.match} ${styles.matchTbd}`}
+      aria-label={`Fixture ${fixture}, teams to be determined`}
+    >
       <div className={styles.teamRow}>
         <span className={styles.flag}>🏳️</span>
         <span className={styles.teamName}>TBD</span>
@@ -187,7 +185,7 @@ function BracketMatch({
 }
 
 function MatchSlot(props: {
-  match: Match | null;
+  slot: BracketSlot;
   matcher: Matcher;
   selected: Participant | null;
   findOwner: FindOwner;
@@ -195,20 +193,21 @@ function MatchSlot(props: {
   selectedFixtureId: number | null;
   onFixtureSelect: FixtureSelectHandler;
 }) {
+  const { slot } = props;
   return (
     <div className={styles.matchSlot}>
-      {props.match ? (
+      {slot.match ? (
         <BracketMatch
-          match={props.match}
+          match={slot.match}
           matcher={props.matcher}
           selected={props.selected}
           findOwner={props.findOwner}
-          isNext={props.match.id === props.nextMatchId}
-          isSelected={props.match.id === props.selectedFixtureId}
+          isNext={slot.match.id === props.nextMatchId}
+          isSelected={slot.match.id === props.selectedFixtureId}
           onFixtureSelect={props.onFixtureSelect}
         />
       ) : (
-        <BracketPlaceholder />
+        <BracketPlaceholder fixture={slot.fixture} />
       )}
     </div>
   );
@@ -216,7 +215,7 @@ function MatchSlot(props: {
 
 function RoundColumn({
   label,
-  matches,
+  slots,
   hasNext,
   matcher,
   selected,
@@ -226,7 +225,7 @@ function RoundColumn({
   onFixtureSelect,
 }: {
   label: string;
-  matches: (Match | null)[];
+  slots: BracketSlot[];
   hasNext: boolean;
   matcher: Matcher;
   selected: Participant | null;
@@ -239,10 +238,10 @@ function RoundColumn({
     <div className={`${styles.round} ${hasNext ? styles.withConnectors : ''}`}>
       <h3 className={styles.roundTitle}>{label}</h3>
       <div className={styles.roundBody}>
-        {matches.map((match, index) => (
+        {slots.map((slot) => (
           <MatchSlot
-            key={match?.id ?? `${label}-slot-${index}`}
-            match={match}
+            key={slot.fixture}
+            slot={slot}
             matcher={matcher}
             selected={selected}
             findOwner={findOwner}
@@ -270,46 +269,17 @@ export function BracketView({
     [participants],
   );
 
-  const byStage = useMemo(() => {
-    const grouped = new Map<string, Match[]>();
-    for (const match of matches) {
-      if (match.stage === 'GROUP_STAGE') continue;
-      const list = grouped.get(match.stage) ?? [];
-      list.push(match);
-      grouped.set(match.stage, list);
-    }
-
-    const map = new Map<string, (Match | null)[]>();
-    for (const round of ROUNDS) {
-      map.set(round.stage, buildBracketSlots(round.stage, grouped.get(round.stage) ?? []));
-    }
-    return map;
-  }, [matches]);
-
-  const thirdPlace =
-    matches.find((match) => match.stage === 'THIRD_PLACE') ?? null;
-
-  const hasKnockout =
-    ROUNDS.some((r) => (byStage.get(r.stage)?.some((m) => m !== null) ?? false)) ||
-    thirdPlace !== null;
-
-  if (!hasKnockout) {
-    return (
-      <p className={styles.empty}>
-        Knockout fixtures will appear here once the bracket is published.
-      </p>
-    );
-  }
+  const bracket = useMemo(() => buildKnockoutBracket(matches), [matches]);
 
   return (
     <div className={styles.bracketScroll}>
       <div className={styles.bracket}>
-        {ROUNDS.map((round, index) => (
+        {bracket.rounds.map((round, index) => (
           <RoundColumn
             key={round.stage}
-            label={round.label}
-            matches={byStage.get(round.stage) ?? []}
-            hasNext={index < ROUNDS.length - 1}
+            label={ROUND_LABELS[round.stage] ?? round.stage}
+            slots={round.slots}
+            hasNext={index < bracket.rounds.length - 1}
             matcher={matcher}
             selected={selected}
             findOwner={findOwner}
@@ -320,22 +290,20 @@ export function BracketView({
         ))}
       </div>
 
-      {thirdPlace && (
-        <div className={styles.thirdPlace}>
-          <h3 className={styles.roundTitle}>Third place play-off</h3>
-          <div className={styles.thirdPlaceCard}>
-            <BracketMatch
-              match={thirdPlace}
-              matcher={matcher}
-              selected={selected}
-              findOwner={findOwner}
-              isNext={thirdPlace.id === nextMatchId}
-              isSelected={thirdPlace.id === selectedFixtureId}
-              onFixtureSelect={onFixtureSelect}
-            />
-          </div>
+      <div className={styles.thirdPlace}>
+        <h3 className={styles.roundTitle}>Third place play-off</h3>
+        <div className={styles.thirdPlaceCard}>
+          <MatchSlot
+            slot={bracket.thirdPlace}
+            matcher={matcher}
+            selected={selected}
+            findOwner={findOwner}
+            nextMatchId={nextMatchId}
+            selectedFixtureId={selectedFixtureId}
+            onFixtureSelect={onFixtureSelect}
+          />
         </div>
-      )}
+      </div>
     </div>
   );
 }
