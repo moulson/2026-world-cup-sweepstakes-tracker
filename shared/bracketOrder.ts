@@ -14,7 +14,8 @@
  */
 export const BRACKET_DISPLAY_ORDER: Readonly<Record<string, readonly number[]>> = {
   LAST_32: [74, 77, 73, 75, 76, 78, 79, 80, 83, 84, 81, 82, 86, 88, 85, 87],
-  LAST_16: [89, 90, 91, 92, 93, 94, 95, 96],
+  // Pair order matches the quarter-final feeder map (98 ← 93+94, 99 ← 91+92).
+  LAST_16: [89, 90, 93, 94, 91, 92, 95, 96],
   QUARTER_FINALS: [97, 98, 99, 100],
   SEMI_FINALS: [101, 102],
   FINAL: [104],
@@ -39,33 +40,37 @@ export const BRACKET_FEEDERS: Readonly<Record<number, readonly [number, number]>
   104: [101, 102],
 };
 
+export type BracketSlot<T extends { id: number }> = T | null;
+
 /**
- * Order knockout matches for bracket display so connector lines match FIFA feeders.
- * Unknown ids are appended in ascending order after the mapped slots.
+ * Fixed bracket slots for a knockout round. Missing fixtures (not yet returned by
+ * the API) are `null` so published ties stay in the correct vertical position.
  */
-export function sortMatchesForBracket<T extends { id: number }>(
+export function buildBracketSlots<T extends { id: number }>(
   stage: string,
   matches: T[],
-): T[] {
+): BracketSlot<T>[] {
   const order = BRACKET_DISPLAY_ORDER[stage];
   if (!order?.length) {
     return [...matches].sort((a, b) => a.id - b.id);
   }
 
   const byId = new Map(matches.map((match) => [match.id, match]));
-  const ordered: T[] = [];
-  const placed = new Set<number>();
+  const slots: BracketSlot<T>[] = order.map((id) => byId.get(id) ?? null);
 
-  for (const id of order) {
-    const match = byId.get(id);
-    if (match) {
-      ordered.push(match);
-      placed.add(id);
-    }
-  }
-
-  const remainder = matches
-    .filter((match) => !placed.has(match.id))
+  const knownIds = new Set<number>(order);
+  const extras = matches
+    .filter((match) => !knownIds.has(match.id))
     .sort((a, b) => a.id - b.id);
-  return [...ordered, ...remainder];
+  return extras.length ? [...slots, ...extras] : slots;
+}
+
+/** Non-null slots only — for callers that do not need placeholders. */
+export function sortMatchesForBracket<T extends { id: number }>(
+  stage: string,
+  matches: T[],
+): T[] {
+  return buildBracketSlots(stage, matches).filter(
+    (match): match is T => match !== null,
+  );
 }
