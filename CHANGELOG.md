@@ -28,6 +28,7 @@
 
 ### Fixed
 
+- Knockout bracket no longer renders twice (blank placeholder tree plus real fixtures): bracket slots are keyed by football-data.org `matchday` (the official FIFA fixture number 1–104), not the API's internal match `id`
 - Knockout bracket connector lines now follow FIFA's cross-pairings at the Round of 32 → Round of 16 step (e.g. Brazil/Japan and Ivory Coast/Norway feed match 91; Spain/Austria and Portugal/Croatia feed match 93) instead of assuming consecutive match ids are paired
 - Knockout bracket keeps fixed vertical slots for unpublished ties (TBD placeholders) so fixtures with known teams stay in the correct row — e.g. Brazil's Round of 16 tie remains 5th even when only three last-16 matches have been published so far
 - Penalty-shootout and extra-time results no longer break the app: football-data.org v4 can return `homeTeam`/`awayTeam` score fields (especially after knockout ties), which left `fullTime.home`/`away` undefined and caused elimination/result logic to mis-read finished matches. Scores are now normalized on fetch and when loading the cache, and win/loss styling uses `score.winner` when full-time is level
