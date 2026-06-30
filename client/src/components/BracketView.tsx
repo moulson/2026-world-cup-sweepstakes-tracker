@@ -9,7 +9,7 @@ import {
 } from '../../../shared/matchResult';
 import { getFlag } from '../../../shared/flags';
 import { getKnockoutMatchLoser, isSameTeam } from '../../../shared/elimination';
-import { sortMatchesForBracket } from '../../../shared/bracketOrder';
+import { buildBracketSlots } from '../../../shared/bracketOrder';
 import { getDisplayScore } from '../../../shared/matchScore';
 import styles from './BracketView.module.css';
 
@@ -71,6 +71,21 @@ function formatKickoff(utcDate: string): string {
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+function BracketPlaceholder() {
+  return (
+    <div className={`${styles.match} ${styles.matchTbd}`}>
+      <div className={styles.teamRow}>
+        <span className={styles.flag}>🏳️</span>
+        <span className={styles.teamName}>TBD</span>
+      </div>
+      <div className={styles.teamRow}>
+        <span className={styles.flag}>🏳️</span>
+        <span className={styles.teamName}>TBD</span>
+      </div>
+    </div>
+  );
 }
 
 function BracketMatch({
@@ -172,7 +187,7 @@ function BracketMatch({
 }
 
 function MatchSlot(props: {
-  match: Match;
+  match: Match | null;
   matcher: Matcher;
   selected: Participant | null;
   findOwner: FindOwner;
@@ -182,15 +197,19 @@ function MatchSlot(props: {
 }) {
   return (
     <div className={styles.matchSlot}>
-      <BracketMatch
-        match={props.match}
-        matcher={props.matcher}
-        selected={props.selected}
-        findOwner={props.findOwner}
-        isNext={props.match.id === props.nextMatchId}
-        isSelected={props.match.id === props.selectedFixtureId}
-        onFixtureSelect={props.onFixtureSelect}
-      />
+      {props.match ? (
+        <BracketMatch
+          match={props.match}
+          matcher={props.matcher}
+          selected={props.selected}
+          findOwner={props.findOwner}
+          isNext={props.match.id === props.nextMatchId}
+          isSelected={props.match.id === props.selectedFixtureId}
+          onFixtureSelect={props.onFixtureSelect}
+        />
+      ) : (
+        <BracketPlaceholder />
+      )}
     </div>
   );
 }
@@ -207,7 +226,7 @@ function RoundColumn({
   onFixtureSelect,
 }: {
   label: string;
-  matches: Match[];
+  matches: (Match | null)[];
   hasNext: boolean;
   matcher: Matcher;
   selected: Participant | null;
@@ -220,9 +239,9 @@ function RoundColumn({
     <div className={`${styles.round} ${hasNext ? styles.withConnectors : ''}`}>
       <h3 className={styles.roundTitle}>{label}</h3>
       <div className={styles.roundBody}>
-        {matches.map((match) => (
+        {matches.map((match, index) => (
           <MatchSlot
-            key={match.id}
+            key={match?.id ?? `${label}-slot-${index}`}
             match={match}
             matcher={matcher}
             selected={selected}
@@ -252,19 +271,27 @@ export function BracketView({
   );
 
   const byStage = useMemo(() => {
-    const map = new Map<string, Match[]>();
+    const grouped = new Map<string, Match[]>();
     for (const match of matches) {
       if (match.stage === 'GROUP_STAGE') continue;
-      const list = map.get(match.stage) ?? [];
+      const list = grouped.get(match.stage) ?? [];
       list.push(match);
-      map.set(match.stage, list);
+      grouped.set(match.stage, list);
     }
-    for (const [stage, list] of map) map.set(stage, sortMatchesForBracket(stage, list));
+
+    const map = new Map<string, (Match | null)[]>();
+    for (const round of ROUNDS) {
+      map.set(round.stage, buildBracketSlots(round.stage, grouped.get(round.stage) ?? []));
+    }
     return map;
   }, [matches]);
 
-  const thirdPlace = byStage.get('THIRD_PLACE')?.[0] ?? null;
-  const hasKnockout = ROUNDS.some((r) => (byStage.get(r.stage)?.length ?? 0) > 0);
+  const thirdPlace =
+    matches.find((match) => match.stage === 'THIRD_PLACE') ?? null;
+
+  const hasKnockout =
+    ROUNDS.some((r) => (byStage.get(r.stage)?.some((m) => m !== null) ?? false)) ||
+    thirdPlace !== null;
 
   if (!hasKnockout) {
     return (
