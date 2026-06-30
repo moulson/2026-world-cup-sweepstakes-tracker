@@ -29,7 +29,7 @@
 
 ### Fixed
 
-- Knockout bracket no longer renders twice (blank placeholder tree plus real fixtures): bracket slots are keyed by football-data.org `matchday` (the official FIFA fixture number 1–104), not the API's internal match `id`
+- Knockout bracket populates again when football-data.org omits FIFA fixture numbers from `matchday`: ties are now matched onto the predetermined tree by stage and kickoff time (with per-round `matchday` fallback)
 - Round of 32 column order is now derived from the Round of 16 layout so connector lines meet the correct tie — Brazil's last-16 fixture sits at the junction of the Brazil/Japan and Ivory Coast/Norway round-of-32 paths
 - Knockout bracket connector lines now follow FIFA's cross-pairings at the Round of 32 → Round of 16 step (e.g. Brazil/Japan and Ivory Coast/Norway feed match 91; Spain/Austria and Portugal/Croatia feed match 93) instead of assuming consecutive match ids are paired
 - Knockout bracket keeps fixed vertical slots for unpublished ties (TBD placeholders) so fixtures with known teams stay in the correct row — e.g. Brazil's Round of 16 tie remains 5th even when only three last-16 matches have been published so far
