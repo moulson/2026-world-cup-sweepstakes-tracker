@@ -11,6 +11,7 @@
 
 ### Changed
 
+- Knockout bracket is now built from the predetermined FIFA 2026 fixture tree (fixtures 73–104): every round-of-32 slot through the final is always rendered, with live API data overlaid by `matchday` and TBD shown only where teams or scores are not yet known
 - Participants whose four nations are all eliminated are now dimmed across the whole card (greyed avatar, muted name) for quicker scanning of who is still in the running
 - Knockout bracket rows for the losing side of a finished tie are dimmed with a strikethrough team name and greyed flag, matching the per-team styling on participant cards
 - Knockout bracket is now an accurate binary tree: rounds use the FIFA 2026 feeder map so each tie connects to the correct next-round match (e.g. Brazil/Japan and Ivory Coast/Norway feed match 91), with rounds vertically aligned so every match sits at the midpoint of its two feeders; the Final is a connected column and the third-place play-off is shown as a separate card
@@ -29,6 +30,7 @@
 ### Fixed
 
 - Knockout bracket no longer renders twice (blank placeholder tree plus real fixtures): bracket slots are keyed by football-data.org `matchday` (the official FIFA fixture number 1–104), not the API's internal match `id`
+- Round of 32 column order is now derived from the Round of 16 layout so connector lines meet the correct tie — Brazil's last-16 fixture sits at the junction of the Brazil/Japan and Ivory Coast/Norway round-of-32 paths
 - Knockout bracket connector lines now follow FIFA's cross-pairings at the Round of 32 → Round of 16 step (e.g. Brazil/Japan and Ivory Coast/Norway feed match 91; Spain/Austria and Portugal/Croatia feed match 93) instead of assuming consecutive match ids are paired
 - Knockout bracket keeps fixed vertical slots for unpublished ties (TBD placeholders) so fixtures with known teams stay in the correct row — e.g. Brazil's Round of 16 tie remains 5th even when only three last-16 matches have been published so far
 - Penalty-shootout and extra-time results no longer break the app: football-data.org v4 can return `homeTeam`/`awayTeam` score fields (especially after knockout ties), which left `fullTime.home`/`away` undefined and caused elimination/result logic to mis-read finished matches. Scores are now normalized on fetch and when loading the cache, and win/loss styling uses `score.winner` when full-time is level
