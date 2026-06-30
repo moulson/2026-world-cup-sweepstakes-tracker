@@ -91,6 +91,12 @@
   text-align: center;
 }
 
+.penNote {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
 .badge {
   font-size: 0.75rem;
   font-weight: 600;

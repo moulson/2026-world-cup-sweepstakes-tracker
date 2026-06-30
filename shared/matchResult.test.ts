@@ -78,4 +78,19 @@ describe('getParticipantTeamResult', () => {
     const matcher = buildParticipantMatcher(makeParticipant());
     expect(getParticipantTeamResult(match, matcher)).toBe('pending');
   });
+
+  it('returns win/loss for a knockout tie decided on penalties', () => {
+    const match = makeMatch({
+      stage: 'LAST_16',
+      group: null,
+      score: {
+        winner: 'AWAY_TEAM',
+        duration: 'PENALTY_SHOOTOUT',
+        fullTime: { home: 1, away: 1 },
+        penalties: { home: 4, away: 5 },
+      },
+    });
+    const matcher = buildParticipantMatcher(makeParticipant());
+    expect(getParticipantTeamResult(match, matcher)).toBe('win');
+  });
 });

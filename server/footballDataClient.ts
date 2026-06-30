@@ -1,3 +1,4 @@
+import { normalizeMatch } from '../shared/matchScore.js';
 import type { Match, Team } from '../shared/types.js';
 
 const BASE_URL = 'https://api.football-data.org/v4';
@@ -34,7 +35,7 @@ export class FootballDataClient {
     const data = await this.fetch<MatchesResponse>(
       `/competitions/${COMPETITION}/matches?season=${SEASON}`,
     );
-    return data.matches;
+    return data.matches.map(normalizeMatch);
   }
 
   async getTeams(): Promise<Team[]> {

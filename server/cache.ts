@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { normalizeMatch } from '../shared/matchScore.js';
 import type { MatchesCache } from '../shared/types.js';
 import { CACHE_DIR, MATCHES_CACHE } from './paths.js';
 
@@ -12,7 +13,11 @@ export async function ensureCacheDir(): Promise<void> {
 export async function loadCache(): Promise<MatchesCache | null> {
   try {
     const raw = await fs.readFile(MATCHES_CACHE, 'utf-8');
-    return JSON.parse(raw) as MatchesCache;
+    const cache = JSON.parse(raw) as MatchesCache;
+    return {
+      ...cache,
+      matches: cache.matches.map(normalizeMatch),
+    };
   } catch {
     return null;
   }

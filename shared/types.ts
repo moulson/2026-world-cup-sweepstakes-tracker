@@ -21,11 +21,19 @@ export interface Team {
   crest?: string | null;
 }
 
+export interface ScoreGoals {
+  home: number | null;
+  away: number | null;
+}
+
 export interface MatchScore {
   winner: 'HOME_TEAM' | 'AWAY_TEAM' | 'DRAW' | null;
   duration: string;
-  fullTime: { home: number | null; away: number | null };
-  halfTime?: { home: number | null; away: number | null };
+  fullTime: ScoreGoals;
+  halfTime?: ScoreGoals;
+  regularTime?: ScoreGoals;
+  extraTime?: ScoreGoals;
+  penalties?: ScoreGoals;
 }
 
 export interface Match {

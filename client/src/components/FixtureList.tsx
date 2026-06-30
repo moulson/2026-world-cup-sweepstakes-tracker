@@ -7,6 +7,7 @@ import {
   teamMatchesMatcher,
 } from '../../../shared/matchResult';
 import { getFlag } from '../../../shared/flags';
+import { getDisplayScore } from '../../../shared/matchScore';
 import styles from './FixtureList.module.css';
 
 interface Props {
@@ -113,9 +114,8 @@ export function FixtureList({
               const awayHighlighted =
                 involved && teamMatchesMatcher(match.awayTeam, matcher);
 
-              const homeScore = match.score.fullTime.home;
-              const awayScore = match.score.fullTime.away;
-              const hasScore = homeScore !== null && awayScore !== null;
+              const displayScore = getDisplayScore(match.score);
+              const hasScore = displayScore !== null;
 
               return (
                 <div
@@ -144,7 +144,13 @@ export function FixtureList({
                     <span className={styles.vs}>
                       {hasScore ? (
                         <strong>
-                          {homeScore} – {awayScore}
+                          {displayScore.home} – {displayScore.away}
+                          {displayScore.penaltyNote && (
+                            <span className={styles.penNote}>
+                              {' '}
+                              ({displayScore.penaltyNote})
+                            </span>
+                          )}
                         </strong>
                       ) : (
                         'vs'
