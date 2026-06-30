@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Participant } from '../../../shared/types';
 import {
+  isParticipantFullyEliminated,
   isParticipantTeamEliminated,
   type EliminationInfo,
 } from '../../../shared/elimination';
@@ -26,11 +27,12 @@ export function ParticipantCard({
   const aliveCount = participant.teams.filter(
     (team) => !isParticipantTeamEliminated(team, elimination),
   ).length;
+  const fullyEliminated = isParticipantFullyEliminated(participant, elimination);
 
   return (
     <button
       type="button"
-      className={`${styles.card} ${selected ? styles.selected : ''} ${highlighted ? styles.highlighted : ''}`}
+      className={`${styles.card} ${selected ? styles.selected : ''} ${highlighted ? styles.highlighted : ''} ${fullyEliminated ? styles.fullyEliminated : ''}`}
       onClick={onSelect}
       aria-pressed={selected}
     >

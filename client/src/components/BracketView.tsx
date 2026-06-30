@@ -8,6 +8,7 @@ import {
   teamMatchesMatcher,
 } from '../../../shared/matchResult';
 import { getFlag } from '../../../shared/flags';
+import { getKnockoutMatchLoser, isSameTeam } from '../../../shared/elimination';
 import { getDisplayScore } from '../../../shared/matchScore';
 import styles from './BracketView.module.css';
 
@@ -100,6 +101,9 @@ function BracketMatch({
 
   const displayScore = getDisplayScore(match.score);
   const hasScore = displayScore !== null;
+  const loser = getKnockoutMatchLoser(match);
+  const homeLost = loser !== null && isSameTeam(match.homeTeam, loser);
+  const awayLost = loser !== null && isSameTeam(match.awayTeam, loser);
 
   const homeOwner = findOwner(match.homeTeam);
   const awayOwner = findOwner(match.awayTeam);
@@ -141,7 +145,7 @@ function BracketMatch({
     >
       {isNext && <span className={styles.nextBadge}>Next up</span>}
       <div
-        className={`${styles.teamRow} ${homeHighlighted ? styles.teamHighlighted : ''}`}
+        className={`${styles.teamRow} ${homeHighlighted ? styles.teamHighlighted : ''} ${homeLost ? styles.teamLost : ''}`}
       >
         <span className={styles.flag}>{getFlag(teamLabel(match.homeTeam.name))}</span>
         <span className={styles.teamName}>{teamLabel(match.homeTeam.name)}</span>
@@ -149,7 +153,7 @@ function BracketMatch({
         {hasScore && <span className={styles.score}>{displayScore.home}</span>}
       </div>
       <div
-        className={`${styles.teamRow} ${awayHighlighted ? styles.teamHighlighted : ''}`}
+        className={`${styles.teamRow} ${awayHighlighted ? styles.teamHighlighted : ''} ${awayLost ? styles.teamLost : ''}`}
       >
         <span className={styles.flag}>{getFlag(teamLabel(match.awayTeam.name))}</span>
         <span className={styles.teamName}>{teamLabel(match.awayTeam.name)}</span>

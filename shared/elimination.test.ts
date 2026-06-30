@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   computeEliminatedTeams,
+  getKnockoutMatchLoser,
+  isParticipantFullyEliminated,
   isParticipantTeamEliminated,
 } from './elimination';
-import type { Match, ParticipantTeam } from './types';
+import type { Match, Participant, ParticipantTeam } from './types';
 
 function makeMatch(overrides: Partial<Match> = {}): Match {
   return {
@@ -31,6 +33,62 @@ function entry(csvName: string, id: number | null): ParticipantTeam {
     team: id == null ? null : { id, name: csvName, shortName: csvName, tla: null },
   };
 }
+
+function makeParticipant(teams: ParticipantTeam[]): Participant {
+  return {
+    name: 'Test',
+    slug: 'test',
+    profileImage: '/profiles/test.jpg',
+    teams,
+  };
+}
+
+describe('getKnockoutMatchLoser', () => {
+  it('returns the away side when the home team wins in regulation', () => {
+    const match = makeMatch({
+      stage: 'LAST_16',
+      group: null,
+      score: { winner: 'HOME_TEAM', duration: 'REGULAR', fullTime: { home: 2, away: 0 } },
+    });
+
+    expect(getKnockoutMatchLoser(match)?.id).toBe(20);
+  });
+
+  it('returns the home side when a penalty shootout is won by the away team', () => {
+    const match = makeMatch({
+      stage: 'QUARTER_FINALS',
+      group: null,
+      score: { winner: 'AWAY_TEAM', duration: 'PENALTIES', fullTime: { home: 1, away: 1 } },
+    });
+
+    expect(getKnockoutMatchLoser(match)?.id).toBe(10);
+  });
+
+  it('returns null for unfinished ties', () => {
+    const match = makeMatch({ stage: 'LAST_16', group: null, status: 'TIMED' });
+    expect(getKnockoutMatchLoser(match)).toBeNull();
+  });
+});
+
+describe('isParticipantFullyEliminated', () => {
+  it('is true when every team on the card is eliminated', () => {
+    const elim = computeEliminatedTeams([
+      makeMatch({
+        stage: 'LAST_16',
+        group: null,
+        homeTeam: { id: 1, name: 'Brazil', shortName: 'Brazil', tla: 'BRA' },
+        awayTeam: { id: 2, name: 'Japan', shortName: 'Japan', tla: 'JPN' },
+        score: { winner: 'HOME_TEAM', duration: 'REGULAR', fullTime: { home: 2, away: 1 } },
+      }),
+    ]);
+
+    const participant = makeParticipant([entry('Japan', 2), entry('Wales', 99)]);
+    expect(isParticipantFullyEliminated(participant, elim)).toBe(false);
+
+    const out = makeParticipant([entry('Japan', 2)]);
+    expect(isParticipantFullyEliminated(out, elim)).toBe(true);
+  });
+});
 
 describe('computeEliminatedTeams', () => {
   it('marks the loser of a finished knockout tie as eliminated', () => {

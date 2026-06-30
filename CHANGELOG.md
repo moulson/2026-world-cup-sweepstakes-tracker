@@ -11,6 +11,8 @@
 
 ### Changed
 
+- Participants whose four nations are all eliminated are now dimmed across the whole card (greyed avatar, muted name) for quicker scanning of who is still in the running
+- Knockout bracket rows for the losing side of a finished tie are dimmed with a strikethrough team name and greyed flag, matching the per-team styling on participant cards
 - Knockout bracket is now an accurate binary tree: rounds are ordered by football-data match id (the official bracket order) instead of by kickoff date, so consecutive Round of 32 ties feed the correct Round of 16 match (e.g. Germany v Paraguay vs the France v Sweden winner)
 - Bracket draws connector lines between each tie and the match it feeds, with rounds vertically aligned so every match sits at the midpoint of its two feeders; the Final is a connected column and the third-place play-off is shown as a separate card
 - `docker-compose.cloudflared.yml` for deploy behind an existing Cloudflare Tunnel on the shared `cloudflare_tunnel` Docker network (no published host port; tunnel ingress targets `http://world-cup-sweepstakes:5000`)

@@ -33,6 +33,23 @@
   box-shadow: 0 0 0 3px var(--accent-glow), 0 0 0 6px rgba(245, 158, 11, 0.3);
 }
 
+.card.fullyEliminated {
+  opacity: 0.45;
+  background: color-mix(in srgb, var(--surface) 85%, transparent);
+}
+
+.card.fullyEliminated .avatar img {
+  filter: grayscale(1);
+}
+
+.card.fullyEliminated .name {
+  color: var(--text-muted);
+}
+
+.card.fullyEliminated:hover {
+  opacity: 0.6;
+}
+
 .avatar {
   flex-shrink: 0;
   width: 56px;
