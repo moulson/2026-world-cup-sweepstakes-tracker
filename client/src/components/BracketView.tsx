@@ -8,6 +8,7 @@ import {
   teamMatchesMatcher,
 } from '../../../shared/matchResult';
 import { getFlag } from '../../../shared/flags';
+import { getDisplayScore } from '../../../shared/matchScore';
 import styles from './BracketView.module.css';
 
 type FindOwner = (team: Team) => Participant | null;
@@ -97,9 +98,8 @@ function BracketMatch({
   const homeHighlighted = involved && teamMatchesMatcher(match.homeTeam, matcher);
   const awayHighlighted = involved && teamMatchesMatcher(match.awayTeam, matcher);
 
-  const homeScore = match.score.fullTime.home;
-  const awayScore = match.score.fullTime.away;
-  const hasScore = homeScore !== null && awayScore !== null;
+  const displayScore = getDisplayScore(match.score);
+  const hasScore = displayScore !== null;
 
   const homeOwner = findOwner(match.homeTeam);
   const awayOwner = findOwner(match.awayTeam);
@@ -146,7 +146,7 @@ function BracketMatch({
         <span className={styles.flag}>{getFlag(teamLabel(match.homeTeam.name))}</span>
         <span className={styles.teamName}>{teamLabel(match.homeTeam.name)}</span>
         {homeOwner && <span className={styles.participantName}>{homeOwner.name}</span>}
-        {hasScore && <span className={styles.score}>{homeScore}</span>}
+        {hasScore && <span className={styles.score}>{displayScore.home}</span>}
       </div>
       <div
         className={`${styles.teamRow} ${awayHighlighted ? styles.teamHighlighted : ''}`}
@@ -154,10 +154,13 @@ function BracketMatch({
         <span className={styles.flag}>{getFlag(teamLabel(match.awayTeam.name))}</span>
         <span className={styles.teamName}>{teamLabel(match.awayTeam.name)}</span>
         {awayOwner && <span className={styles.participantName}>{awayOwner.name}</span>}
-        {hasScore && <span className={styles.score}>{awayScore}</span>}
+        {hasScore && <span className={styles.score}>{displayScore.away}</span>}
       </div>
       <div className={styles.matchMeta}>
         <time dateTime={match.utcDate}>{formatKickoff(match.utcDate)}</time>
+        {displayScore?.penaltyNote && (
+          <span className={styles.penNote}>{displayScore.penaltyNote}</span>
+        )}
         <span
           className={`${styles.status} ${match.status === 'IN_PLAY' || match.status === 'PAUSED' ? styles.statusLive : ''}`}
         >

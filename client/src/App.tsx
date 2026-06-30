@@ -10,6 +10,7 @@ import {
 } from './api';
 import { BracketView } from './components/BracketView';
 import { FixtureList } from './components/FixtureList';
+import { LiveGamesBar } from './components/LiveGamesBar';
 import { ParticipantGrid } from './components/ParticipantGrid';
 import styles from './App.module.css';
 
@@ -65,21 +66,41 @@ export default function App() {
   );
 
   const loadData = useCallback(async () => {
-    try {
-      const [p, m, s] = await Promise.all([
+    const errors: string[] = [];
+
+    const [participantsResult, matchesResult, statusResult] =
+      await Promise.allSettled([
         fetchParticipants(),
         fetchMatches(),
         fetchStatus(),
       ]);
-      setParticipants(p);
-      setMatches(m);
-      setStatus(s);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load data');
-    } finally {
-      setLoading(false);
+
+    if (participantsResult.status === 'fulfilled') {
+      setParticipants(participantsResult.value);
+    } else {
+      errors.push(
+        participantsResult.reason instanceof Error
+          ? participantsResult.reason.message
+          : 'Failed to load participants',
+      );
     }
+
+    if (matchesResult.status === 'fulfilled') {
+      setMatches(matchesResult.value);
+    } else {
+      errors.push(
+        matchesResult.reason instanceof Error
+          ? matchesResult.reason.message
+          : 'Failed to load matches',
+      );
+    }
+
+    if (statusResult.status === 'fulfilled') {
+      setStatus(statusResult.value);
+    }
+
+    setError(errors.length > 0 ? errors.join(' · ') : null);
+    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -149,7 +170,7 @@ export default function App() {
     return <div className={styles.centered}>Loading sweepstakes data…</div>;
   }
 
-  if (error && !matches) {
+  if (error && !matches && participants.length === 0) {
     return <div className={styles.centered}>{error}</div>;
   }
 
@@ -177,7 +198,14 @@ export default function App() {
         </div>
       </header>
 
+      {matches && <LiveGamesBar matches={matches.matches} />}
+
       <main className={styles.main}>
+        {error && (
+          <p className={styles.loadWarning} role="status">
+            {error}
+          </p>
+        )}
         <section>
           <h2 className={styles.sectionTitle}>Participants</h2>
           <ParticipantGrid

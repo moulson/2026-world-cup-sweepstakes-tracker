@@ -4,6 +4,7 @@ import {
   resolveCsvLookupName,
   type TeamAliasMap,
 } from './teamMatch.js';
+import { readFullTime } from './matchScore.js';
 
 const FINISHED_STATUSES = new Set(['FINISHED', 'AWARDED']);
 
@@ -52,15 +53,14 @@ export function computeEliminatedTeams(matches: Match[]): EliminationInfo {
 
   for (const match of knockoutMatches) {
     if (!FINISHED_STATUSES.has(match.status)) continue;
-    const home = match.score.fullTime.home;
-    const away = match.score.fullTime.away;
+    const { home, away } = readFullTime(match.score);
     if (home === null || away === null) continue;
 
     let loser: Team | null = null;
     if (home > away) loser = match.awayTeam;
     else if (away > home) loser = match.homeTeam;
-    else if (match.score.winner === 'HOME_TEAM') loser = match.awayTeam;
-    else if (match.score.winner === 'AWAY_TEAM') loser = match.homeTeam;
+    else if (match.score?.winner === 'HOME_TEAM') loser = match.awayTeam;
+    else if (match.score?.winner === 'AWAY_TEAM') loser = match.homeTeam;
 
     if (loser && isRealTeam(loser)) {
       collectTeamKeys(loser, teamIds, normalizedNames);

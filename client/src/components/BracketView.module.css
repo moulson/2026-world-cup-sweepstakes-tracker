@@ -190,6 +190,12 @@
   text-align: right;
 }
 
+.penNote {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
 .clickable {
   cursor: pointer;
 }

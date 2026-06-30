@@ -26,7 +26,12 @@
 
 ### Fixed
 
-- Team-to-participant matching no longer produces false positives from loose substring matching — fixtures matched an owner whose three-letter code happened to be a substring of the team name (e.g. Japan resolving to the Panama owner via "PAN", or Australia to the Austria owner via "AUS"). The fuzzy name fallback now only matches on whole-word boundaries, so owners like Japan → Alex and Germany → Dad resolve correctly
+- Penalty-shootout and extra-time results no longer break the app: football-data.org v4 can return `homeTeam`/`awayTeam` score fields (especially after knockout ties), which left `fullTime.home`/`away` undefined and caused elimination/result logic to mis-read finished matches. Scores are now normalized on fetch and when loading the cache, and win/loss styling uses `score.winner` when full-time is level
+- Partial API failures no longer blank the whole page — participants and fixtures load independently when one endpoint is unavailable
+
+### Added
+
+- Live match activity pills below the title banner when games are in play, in extra time, or in a penalty shootout — fixtures matched an owner whose three-letter code happened to be a substring of the team name (e.g. Japan resolving to the Panama owner via "PAN", or Australia to the Austria owner via "AUS"). The fuzzy name fallback now only matches on whole-word boundaries, so owners like Japan → Alex and Germany → Dad resolve correctly
 - Bracket matches no longer overlap vertically — each match sits in a taller equal-height slot with clear spacing
 - Clicking a bracket fixture now highlights that fixture (amber ring) and is mutually exclusive with selecting a participant, so a previously selected participant's fixtures no longer stay highlighted; the next-game pre-highlight stops seeding once you interact
 - Participant click-to-highlight now works when team resolver returns null by matching fixture teams on normalized names and aliases
