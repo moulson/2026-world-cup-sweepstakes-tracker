@@ -29,7 +29,13 @@
 
 ### Fixed
 
-- Knockout bracket populates again when football-data.org omits FIFA fixture numbers from `matchday`: ties are now matched onto the predetermined tree by stage and kickoff time (with per-round `matchday` fallback)
+- Fixture cache no longer gets wiped when football-data.org briefly returns an empty match list during a refresh — the scheduler keeps the existing cache and logs a warning instead of persisting `0 fixtures`
+- Empty or missing cache now triggers automatic bootstrap retries every 5 minutes instead of leaving the scheduler dead until a 24-hour stale restart
+- Bootstrap and refresh failures are caught and logged; the scheduler keeps scheduling windows from existing cache data when the API is temporarily unavailable
+- Poll windows for overdue `SCHEDULED`/`TIMED` matches (kickoff passed, API not yet updated) are extended so knockout-day polling does not silently stop
+- Future matches no longer open a poll window at page-load time — polling starts at kickoff, reducing idle API calls between match days
+- SSE client reconnects automatically after a disconnect so the UI picks up cache updates without a manual refresh
+- Client polls every 60s when fixture data is stale (0 fixtures or last fetch over 30 minutes ago), not only during live windows
 - Round of 32 column order is now derived from the Round of 16 layout so connector lines meet the correct tie — Brazil's last-16 fixture sits at the junction of the Brazil/Japan and Ivory Coast/Norway round-of-32 paths
 - Knockout bracket connector lines now follow FIFA's cross-pairings at the Round of 32 → Round of 16 step (e.g. Brazil/Japan and Ivory Coast/Norway feed match 91; Spain/Austria and Portugal/Croatia feed match 93) instead of assuming consecutive match ids are paired
 - Knockout bracket keeps fixed vertical slots for unpublished ties (TBD placeholders) so fixtures with known teams stay in the correct row — e.g. Brazil's Round of 16 tie remains 5th even when only three last-16 matches have been published so far

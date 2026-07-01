@@ -6,6 +6,7 @@ import type { MatchesCache } from '../shared/types.js';
 const POLL_INTERVAL_MS = 60_000;
 const MATCH_DURATION_MS = 2.5 * 60 * 60 * 1000;
 const POST_MATCH_MS = 60 * 60 * 1000;
+const RETRY_MS = 5 * 60 * 1000;
 /** Node.js setTimeout max is 2^31-1 ms (~24.8 days); values above overflow to 1ms. */
 const MAX_TIMEOUT_MS = 2_147_483_647;
 
@@ -46,27 +47,65 @@ export class MatchWindowScheduler {
 
     if (!this.cache || isCacheStale(this.cache)) {
       await this.bootstrap();
-    } else {
-      this.recordFinishedMatches(this.cache.matches);
+      return;
+    }
+
+    this.recordFinishedMatches(this.cache.matches);
+    this.scheduleNextCheck();
+  }
+
+  async bootstrap(): Promise<void> {
+    try {
+      const [matches, teams] = await Promise.all([
+        this.client.getMatches(),
+        this.client.getTeams(),
+      ]);
+
+      if (this.shouldRejectEmptyApiResponse(matches)) {
+        this.scheduleRetry();
+        return;
+      }
+
+      await this.updateCache(matches, teams);
+      this.scheduleNextCheck();
+    } catch (error) {
+      console.error('[scheduler] Bootstrap failed:', error);
+      if (this.cache && this.cache.matches.length > 0) {
+        this.scheduleNextCheck();
+      } else {
+        this.scheduleRetry();
+      }
+    }
+  }
+
+  private async refresh(): Promise<void> {
+    try {
+      const matches = await this.client.getMatches();
+
+      if (this.shouldRejectEmptyApiResponse(matches)) {
+        this.scheduleNextCheck();
+        return;
+      }
+
+      const teams = this.cache?.teams ?? (await this.client.getTeams());
+      await this.updateCache(matches, teams);
+      this.scheduleNextCheck();
+    } catch (error) {
+      console.error('[scheduler] Refresh failed:', error);
       this.scheduleNextCheck();
     }
   }
 
-  async bootstrap(): Promise<void> {
-    const [matches, teams] = await Promise.all([
-      this.client.getMatches(),
-      this.client.getTeams(),
-    ]);
+  private shouldRejectEmptyApiResponse(matches: Match[]): boolean {
+    const previousCount = this.cache?.matches.length ?? 0;
+    if (matches.length > 0 || previousCount === 0) {
+      return false;
+    }
 
-    await this.updateCache(matches, teams);
-    this.scheduleNextCheck();
-  }
-
-  private async refresh(): Promise<void> {
-    const matches = await this.client.getMatches();
-    const teams = this.cache?.teams ?? (await this.client.getTeams());
-    await this.updateCache(matches, teams);
-    this.scheduleNextCheck();
+    console.warn(
+      `[scheduler] API returned 0 matches (cache has ${previousCount}); keeping existing cache`,
+    );
+    return true;
   }
 
   private async updateCache(matches: Match[], teams: Team[]): Promise<void> {
@@ -106,27 +145,34 @@ export class MatchWindowScheduler {
     }
   }
 
-  private buildWindows(matches: Match[]): PollWindow[] {
-    const now = Date.now();
+  buildWindows(matches: Match[], nowMs = Date.now()): PollWindow[] {
     const windows: PollWindow[] = [];
 
     for (const match of matches) {
       const kickoff = new Date(match.utcDate).getTime();
+      let start: number;
       let end: number;
 
       if (match.status === 'FINISHED' || match.status === 'AWARDED') {
         const finished =
           this.finishedAt.get(match.id) ?? match.lastUpdated ?? match.utcDate;
+        start = kickoff;
         end = new Date(finished).getTime() + POST_MATCH_MS;
       } else if (LIVE_STATUSES.has(match.status)) {
-        end = now + MATCH_DURATION_MS;
-      } else {
+        start = kickoff;
+        end = nowMs + MATCH_DURATION_MS;
+      } else if (kickoff > nowMs) {
+        start = kickoff;
         end = kickoff + MATCH_DURATION_MS;
+      } else {
+        // Kickoff passed but API still shows SCHEDULED/TIMED — keep polling
+        start = kickoff;
+        end = nowMs + MATCH_DURATION_MS;
       }
 
-      if (end > now) {
+      if (end > nowMs) {
         windows.push({
-          start: new Date(Math.min(kickoff, now)),
+          start: new Date(start),
           end: new Date(end),
           matchIds: [match.id],
         });
@@ -163,7 +209,7 @@ export class MatchWindowScheduler {
   private getActiveWindow(): PollWindow | null {
     if (!this.cache) return null;
     const now = Date.now();
-    const windows = this.buildWindows(this.cache.matches);
+    const windows = this.buildWindows(this.cache.matches, now);
 
     return (
       windows.find(
@@ -175,7 +221,7 @@ export class MatchWindowScheduler {
   private getNextWindow(): PollWindow | null {
     if (!this.cache) return null;
     const now = Date.now();
-    const windows = this.buildWindows(this.cache.matches);
+    const windows = this.buildWindows(this.cache.matches, now);
     return windows.find((w) => w.end.getTime() > now) ?? null;
   }
 
@@ -200,6 +246,19 @@ export class MatchWindowScheduler {
     this.checkTimer = setTimeout(() => this.scheduleNextCheck(), safeDelay);
   }
 
+  private scheduleRetry(): void {
+    if (this.checkTimer) {
+      clearTimeout(this.checkTimer);
+      this.checkTimer = null;
+    }
+
+    console.log(`[scheduler] Retrying bootstrap in ${RETRY_MS / 1000}s`);
+    this.checkTimer = setTimeout(() => {
+      this.checkTimer = null;
+      void this.bootstrap();
+    }, RETRY_MS);
+  }
+
   private scheduleNextCheck(): void {
     if (this.checkTimer) {
       clearTimeout(this.checkTimer);
@@ -217,7 +276,12 @@ export class MatchWindowScheduler {
     this.stopPolling();
 
     const next = this.getNextWindow();
-    if (!next) return;
+    if (!next) {
+      if (!this.cache || this.cache.matches.length === 0) {
+        this.scheduleRetry();
+      }
+      return;
+    }
 
     const msUntilStart = Math.max(0, next.start.getTime() - Date.now());
     this.scheduleDelayedCheck(msUntilStart);

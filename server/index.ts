@@ -101,7 +101,7 @@ async function main() {
     console.log('Scheduler started');
   } catch (error) {
     console.error('Scheduler bootstrap failed:', error);
-    console.log('Server will start with empty cache; retry on next window');
+    console.log('Server will start; scheduler will retry bootstrap automatically');
   }
 
   app.listen(PORT, () => {
