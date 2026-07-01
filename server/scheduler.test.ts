@@ -1,72 +1,114 @@
 import { describe, expect, it } from 'vitest';
+import { isCacheEmpty, isCacheStale } from './cache.js';
+import type { MatchesCache } from '../shared/types.js';
+import { MatchWindowScheduler } from './scheduler.js';
+import type { Match } from '../shared/types.js';
 
-interface PollWindow {
-  start: Date;
-  end: Date;
-  matchIds: number[];
+function makeMatch(overrides: Partial<Match> & Pick<Match, 'id' | 'utcDate' | 'status'>): Match {
+  return {
+    stage: 'LAST_16',
+    lastUpdated: overrides.utcDate,
+    homeTeam: { id: 1, name: 'Home', shortName: 'Home', tla: 'HOM' },
+    awayTeam: { id: 2, name: 'Away', shortName: 'Away', tla: 'AWY' },
+    score: {
+      winner: null,
+      duration: 'REGULAR',
+      fullTime: { home: null, away: null },
+    },
+    ...overrides,
+  };
 }
 
-function mergeWindows(windows: PollWindow[]): PollWindow[] {
-  if (windows.length === 0) return [];
+describe('cache staleness', () => {
+  const freshCache: MatchesCache = {
+    fetchedAt: new Date().toISOString(),
+    matches: [makeMatch({ id: 1, utcDate: '2026-07-01T18:00:00Z', status: 'SCHEDULED' })],
+    teams: [],
+  };
 
-  const sorted = [...windows].sort(
-    (a, b) => a.start.getTime() - b.start.getTime(),
-  );
-
-  const merged: PollWindow[] = [
-    { ...sorted[0], matchIds: [...sorted[0].matchIds] },
-  ];
-
-  for (let i = 1; i < sorted.length; i++) {
-    const current = sorted[i];
-    const last = merged[merged.length - 1];
-
-    if (current.start.getTime() <= last.end.getTime()) {
-      last.end = new Date(Math.max(last.end.getTime(), current.end.getTime()));
-      last.matchIds.push(...current.matchIds);
-    } else {
-      merged.push({ ...current, matchIds: [...current.matchIds] });
-    }
-  }
-
-  return merged;
-}
-
-describe('mergeWindows', () => {
-  it('merges overlapping windows', () => {
-    const windows: PollWindow[] = [
-      {
-        start: new Date('2026-06-15T18:00:00Z'),
-        end: new Date('2026-06-15T21:00:00Z'),
-        matchIds: [1],
-      },
-      {
-        start: new Date('2026-06-15T20:00:00Z'),
-        end: new Date('2026-06-15T23:00:00Z'),
-        matchIds: [2],
-      },
-    ];
-
-    const result = mergeWindows(windows);
-    expect(result).toHaveLength(1);
-    expect(result[0].matchIds).toEqual([1, 2]);
+  it('treats empty match list as stale', () => {
+    const empty: MatchesCache = { ...freshCache, matches: [] };
+    expect(isCacheEmpty(empty)).toBe(true);
+    expect(isCacheStale(empty)).toBe(true);
   });
 
-  it('keeps separate non-overlapping windows', () => {
-    const windows: PollWindow[] = [
-      {
-        start: new Date('2026-06-15T18:00:00Z'),
-        end: new Date('2026-06-15T20:00:00Z'),
-        matchIds: [1],
-      },
-      {
-        start: new Date('2026-06-16T18:00:00Z'),
-        end: new Date('2026-06-16T20:00:00Z'),
-        matchIds: [2],
-      },
-    ];
+  it('treats populated cache as fresh when recently fetched', () => {
+    expect(isCacheStale(freshCache)).toBe(false);
+  });
+});
 
-    const result = mergeWindows(windows);
-    expect(result).toHaveLength(2);
+describe('buildWindows', () => {
+  const scheduler = new MatchWindowScheduler({
+    getMatches: async () => [],
+    getTeams: async () => [],
+  } as never);
+
+  it('does not open a window for future matches until kickoff', () => {
+    const now = new Date('2026-07-01T10:00:00Z').getTime();
+    const match = makeMatch({
+      id: 1,
+      utcDate: '2026-07-01T18:00:00Z',
+      status: 'SCHEDULED',
+    });
+
+    const windows = scheduler.buildWindows([match], now);
+    expect(windows).toHaveLength(1);
+    expect(windows[0].start.toISOString()).toBe('2026-07-01T18:00:00.000Z');
+    expect(windows[0].end.toISOString()).toBe('2026-07-01T20:30:00.000Z');
+  });
+
+  it('keeps polling when kickoff passed but status is still SCHEDULED', () => {
+    const now = new Date('2026-07-01T20:00:00Z').getTime();
+    const match = makeMatch({
+      id: 2,
+      utcDate: '2026-07-01T18:00:00Z',
+      status: 'SCHEDULED',
+    });
+
+    const windows = scheduler.buildWindows([match], now);
+    expect(windows).toHaveLength(1);
+    expect(windows[0].start.toISOString()).toBe('2026-07-01T18:00:00.000Z');
+    expect(windows[0].end.getTime()).toBe(now + 2.5 * 60 * 60 * 1000);
+  });
+
+  it('merges overlapping windows', () => {
+    const now = new Date('2026-06-15T18:00:00Z').getTime();
+    const windows = scheduler.buildWindows(
+      [
+        makeMatch({ id: 1, utcDate: '2026-06-15T18:00:00Z', status: 'IN_PLAY' }),
+        makeMatch({ id: 2, utcDate: '2026-06-15T20:00:00Z', status: 'SCHEDULED' }),
+      ],
+      now,
+    );
+
+    expect(windows).toHaveLength(1);
+    expect(windows[0].matchIds).toEqual([1, 2]);
+  });
+});
+
+describe('empty API response guard', () => {
+  it('rejects overwriting a populated cache with an empty API response', () => {
+    const scheduler = new MatchWindowScheduler({
+      getMatches: async () => [],
+      getTeams: async () => [],
+    } as never);
+
+    const existing = makeMatch({
+      id: 99,
+      utcDate: '2026-07-01T18:00:00Z',
+      status: 'SCHEDULED',
+    });
+
+    (scheduler as unknown as { cache: MatchesCache }).cache = {
+      fetchedAt: '2026-07-01T07:00:00Z',
+      matches: [existing],
+      teams: [],
+    };
+
+    const reject = (scheduler as unknown as { shouldRejectEmptyApiResponse: (m: Match[]) => boolean })
+      .shouldRejectEmptyApiResponse.bind(scheduler);
+
+    expect(reject([])).toBe(true);
+    expect(reject([existing])).toBe(false);
   });
 });

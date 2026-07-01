@@ -18,23 +18,52 @@ export async function fetchStatus(): Promise<ApiStatus> {
   return res.json();
 }
 
+const SSE_RECONNECT_MS = 5_000;
+const STALE_DATA_MS = 30 * 60 * 1000;
+
 export function subscribeToUpdates(onUpdate: () => void): () => void {
-  const source = new EventSource('/api/events');
+  let source: EventSource | null = null;
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  let closed = false;
 
-  source.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data);
-      if (data.type === 'matches-updated') {
-        onUpdate();
+  const connect = () => {
+    if (closed) return;
+
+    source = new EventSource('/api/events');
+
+    source.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'matches-updated') {
+          onUpdate();
+        }
+      } catch {
+        // ignore malformed events
       }
-    } catch {
-      // ignore malformed events
-    }
+    };
+
+    source.onerror = () => {
+      source?.close();
+      source = null;
+      if (!closed) {
+        reconnectTimer = setTimeout(connect, SSE_RECONNECT_MS);
+      }
+    };
   };
 
-  source.onerror = () => {
-    source.close();
-  };
+  connect();
 
-  return () => source.close();
+  return () => {
+    closed = true;
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    source?.close();
+  };
+}
+
+/** True when fixture data looks missing or hasn't been refreshed recently. */
+export function isFixtureDataStale(status: ApiStatus | null): boolean {
+  if (!status) return false;
+  if (status.matchCount === 0) return true;
+  if (!status.lastFetch) return true;
+  return Date.now() - new Date(status.lastFetch).getTime() > STALE_DATA_MS;
 }

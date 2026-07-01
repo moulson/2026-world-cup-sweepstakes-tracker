@@ -28,8 +28,13 @@ export async function saveCache(cache: MatchesCache): Promise<void> {
   await fs.writeFile(MATCHES_CACHE, JSON.stringify(cache, null, 2), 'utf-8');
 }
 
+export function isCacheEmpty(cache: MatchesCache | null): boolean {
+  return !cache || cache.matches.length === 0;
+}
+
 export function isCacheStale(cache: MatchesCache | null): boolean {
   if (!cache) return true;
+  if (cache.matches.length === 0) return true;
   const age = Date.now() - new Date(cache.fetchedAt).getTime();
   return age > STALE_MS;
 }

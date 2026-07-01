@@ -6,6 +6,7 @@ import {
   fetchMatches,
   fetchParticipants,
   fetchStatus,
+  isFixtureDataStale,
   subscribeToUpdates,
 } from './api';
 import { BracketView } from './components/BracketView';
@@ -123,6 +124,16 @@ export default function App() {
 
     return () => clearInterval(interval);
   }, [status?.activeWindow, loadData]);
+
+  useEffect(() => {
+    if (!isFixtureDataStale(status)) return;
+
+    const interval = setInterval(() => {
+      void loadData();
+    }, 60_000);
+
+    return () => clearInterval(interval);
+  }, [status, loadData]);
 
   useEffect(() => {
     if (!matches || participants.length === 0) return;
